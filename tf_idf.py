@@ -83,6 +83,8 @@ def compute_tfidf(totals,item):
             key_ocur = item['tf-idf']['words_ocur'][key]
             key_tf = key_ocur / tot_words
             it_w_tfidf[key] = key_tf * totals['words_idf'][key]
+        sorted_dict = sorted(it_w_tfidf.items(), key=lambda x:x[1],reverse=True)
+        item['tf-idf']['words_tfidf'] = dict(sorted_dict)
     return
 
 for article_id in articles:
