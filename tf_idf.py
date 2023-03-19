@@ -1,5 +1,6 @@
 import json
 import re
+import math
 
 with open('articles.json') as user_file:
     articles = json.load(user_file)
@@ -41,11 +42,11 @@ def update_total_str_ocur(totals, item):
         totals['docs_cnt'] = 1
     else:
         totals['docs_cnt'] += 1
-    total_wors_ocur_keys = list(totals['words_ocur'].keys())
+    total_words_ocur_keys = list(totals['words_ocur'].keys())
     total_docs_rep_keys = list(totals['docs_rep'].keys())
     item_keys = list(item['tf-idf']['words_ocur'].keys())
     for key in item_keys:
-        if not key in total_wors_ocur_keys:
+        if not key in total_words_ocur_keys:
             totals['words_ocur'][key] = 0
         if not key in total_docs_rep_keys:
             totals['docs_rep'][key] = 0
@@ -54,6 +55,35 @@ def update_total_str_ocur(totals, item):
         totals['docs_rep'][key] += 1
         totals['total'] += amount_in_key
     return totals
+
+def compute_idf(totals):
+    total_keys = totals.keys()
+    check_c = 'words_ocur' in totals
+    check_c = check_c and 'docs_rep' in totals
+    check_c = check_c and 'total' in totals
+    check_c = check_c and 'docs_cnt' in totals
+    if check_c:
+        if not 'words_idf' in total_keys:
+            totals['words_idf'] = {}
+        for key in totals['docs_rep'].keys():
+            totals['words_idf'][key] = math.log10(totals['docs_cnt'] / totals['docs_rep'][key])
+    return totals
+
+def compute_tfidf(totals,item):
+    total_keys = totals.keys()
+    item_keys = item.keys()
+    ckeck_c = 'words_idf' in total_keys
+    ckeck_c = ckeck_c and 'tf-idf' in item_keys
+    if ckeck_c:
+        if not 'words_tfidf' in item['tf-idf']:
+            item['tf-idf']['words_tfidf'] = {}
+        tot_words = item['tf-idf']['total']
+        it_w_tfidf = item['tf-idf']['words_tfidf']
+        for key in item['tf-idf']['words_ocur']:
+            key_ocur = item['tf-idf']['words_ocur'][key]
+            key_tf = key_ocur / tot_words
+            it_w_tfidf[key] = key_tf * totals['words_idf'][key]
+    return
 
 for article_id in articles:
     article = articles[article_id]
@@ -71,7 +101,15 @@ for item in articles:
 for item in videos:
     totals = update_total_str_ocur(totals, videos[item])
 
+compute_idf (totals)
 # articles.update(videos)
+for article_id in articles:
+    article = articles[article_id]
+    compute_tfidf(totals,article)
+
+for video_id in videos:
+    video = videos[video_id]
+    compute_tfidf(totals,video)
 
 json_object = json.dumps(articles)
 with open("result_art.json", "w") as outfile:
