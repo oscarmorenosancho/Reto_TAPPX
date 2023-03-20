@@ -22,16 +22,29 @@ def remove_punt(s):
 
 to_uppercase = lambda s: s.upper()
 
-not_discard = lambda s: len(s) > 2
+def keyword_to_root(s):
+    return stemmer.stem(s)
+
+not_discard = lambda s: len(s) > 3
 
 def compute_str_ocur(item):
     text = remove_punt(item['text'])
     terms = text.split()
     roots = []
-    terms = filter (not_discard, terms)
+    terms = list(filter (not_discard, terms))
     for term in terms:
         roots.append(stemmer.stem(term))
     terms = roots
+    keywords = list(filter(not_discard, item['keywords']))
+    atom_keywords = [*keywords]
+    to_split = [*keywords]
+    for keyword in to_split:
+        atom_keywords += map(keyword_to_root, filter(not_discard, keyword.split(sep=' ')))
+    terms = [*terms, *atom_keywords]
+    if 'title' in item:
+        title = map(keyword_to_root,filter(not_discard, item['title'].split(sep=' ')))
+        terms = [*terms, *title]
+    
     terms_set = list(set(terms))
     terms_ocur = {}
     total = 0
@@ -97,7 +110,7 @@ def compute_tfidf(totals,item):
         sorted_dict = sorted(it_w_tfidf.items(), key=lambda x:x[1],reverse=True)
         sorted_dict = sorted_dict[:70]
         item['tf-idf']['terms_tfidf'] = dict(sorted_dict)
-        del item['tf-idf']['terms_ocur']
+        # del item['tf-idf']['terms_ocur']
     return
 
 def compute_projection(doc1, doc2):
@@ -116,7 +129,9 @@ def transform_in_dict(list_cross):
     for pairing in list_cross:
         if not pairing[0] in res:
             res[pairing[0]] = dict()
+            res[pairing[0]]['len'] = 0 
         res[pairing[0]][pairing[1]] = [pairing[2], pairing[3]]
+        res[pairing[0]]['len'] += 1
             
     return res
 
@@ -158,13 +173,22 @@ for article_id in articles:
 score_mean = (statistics.mean(map(lambda x:x[3], cross_project)))
 
 def score_less_than_mean(x):
-    return  x[3] > score_mean
+    return  x[3] >= 0.8 * score_mean
 
 cross_project = filter(score_less_than_mean, cross_project)
 
 cross_project = sorted(cross_project, key=lambda x:x[3],reverse=True)
 
-cross_project = transform_in_dict(cross_project)
+result = []
+for art_id in articles:
+    pairs = list(filter(lambda x:x[0] == art_id, cross_project))
+    score_mean = (statistics.mean(map(lambda x:x[3], cross_project)))
+    pairs_filt = list(filter(score_less_than_mean, pairs))
+    if len(pairs_filt) < 2:
+        pairs_filt = pairs[:2]
+    result += pairs_filt
+    
+result = transform_in_dict(result)
 
 json_object = json.dumps(articles)
 with open("result_art.json", "w") as outfile:
@@ -178,8 +202,8 @@ json_object = json.dumps(totals)
 with open("totals.json", "w") as outfile:
     outfile.write(json_object)
 
-json_object = json.dumps(cross_project)
+json_object = json.dumps(result)
 with open("cross_project.json", "w") as outfile:
     outfile.write(json_object)
 
-print (len(cross_project))
+print (len(result))
