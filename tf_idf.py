@@ -3,8 +3,12 @@ import re
 import math
 import statistics
 import nltk
+import spacy
 from nltk.stem import SnowballStemmer
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 stemmer = SnowballStemmer('spanish')
+nlp = spacy.load("es_dep_news_trf")
 
 with open('articles.json') as user_file:
     articles = json.load(user_file)
@@ -14,36 +18,61 @@ with open('videos.json') as user_file:
 def remove_punt(s):
     if (s and len(s)>0):
         ret = s.replace('.', ' ').replace(':', ' ').replace(',', ' ')
-        ret = ret.replace('"', '').replace("'", '').replace('-', ' ').replace('|', '')
+        ret = ret.replace('"', ' ').replace("'", ' ').replace('-', ' ').replace('|', ' ')
         ret = ret.replace(')', ' ').replace('(', ' ').replace('}', ' ').replace('{', ' ')
         ret = ret.replace(']', ' ').replace('[', ' ').replace('\\', ' ').replace('/', ' ')
         ret = re.sub('\d+', '', ret)
+        ret = ret.lower()
     return ret
 
-to_uppercase = lambda s: s.upper()
+to_lower = lambda s: s.lower()
 
 def keyword_to_root(s):
     return stemmer.stem(s)
 
 not_discard = lambda s: len(s) > 3
 
+# def tokenize_text(text, stop_words):
+#     words = word_tokenize(text.lower())
+#     tokens = []
+#     for word in words:
+#         if word not in stop_words:
+#             tokens.append(word)
+#     return tokens
+def tokenize_text(text):
+    text = remove_punt(text)
+    doc = nlp(text)
+    lst = []
+    for token in doc:
+        lst.append([token.text, token.pos_])
+    avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV', 'VERB']
+    lst = list(filter(lambda x: not x[1] in avoid , lst))
+    lst = list(map(lambda x: x[0], lst))
+    lst = list(filter(lambda x: len(x)>3, lst))
+
+    return lst
+
+
 def compute_str_ocur(item):
-    text = remove_punt(item['text'])
-    terms = text.split()
-    roots = []
-    terms = list(filter (not_discard, terms))
-    for term in terms:
-        roots.append(stemmer.stem(term))
-    terms = roots
-    keywords = list(filter(not_discard, item['keywords']))
-    atom_keywords = [*keywords]
-    to_split = [*keywords]
-    for keyword in to_split:
-        atom_keywords += map(keyword_to_root, filter(not_discard, keyword.split(sep=' ')))
-    terms = [*terms, *atom_keywords]
-    if 'title' in item:
-        title = map(keyword_to_root,filter(not_discard, item['title'].split(sep=' ')))
-        terms = [*terms, *title]
+    # stop_words = set(stopwords.words('spanish'))
+    # terms = tokenize_text(text, stop_words)
+    text = item['text']
+    terms = tokenize_text(text)
+    print(terms)
+    # roots = []
+    # terms = list(filter (not_discard, terms))
+    # for term in terms:
+    #     roots.append(stemmer.stem(term))
+    # terms = roots
+    # keywords = list(filter(not_discard, item['keywords']))
+    # atom_keywords = [*keywords]
+    # to_split = [*keywords]
+    # for keyword in to_split:
+    #     atom_keywords += map(keyword_to_root, filter(not_discard, keyword.split(sep=' ')))
+    # terms = [*terms, *atom_keywords]
+    # if 'title' in item:
+    #     title = map(keyword_to_root,filter(not_discard, item['title'].split(sep=' ')))
+    #     terms = [*terms, *title]
     
     terms_set = list(set(terms))
     terms_ocur = {}
@@ -108,7 +137,7 @@ def compute_tfidf(totals,item):
             key_tf = key_ocur / tot_terms
             it_w_tfidf[key] = key_tf * totals['terms_idf'][key]
         sorted_dict = sorted(it_w_tfidf.items(), key=lambda x:x[1],reverse=True)
-        sorted_dict = sorted_dict[:70]
+        # sorted_dict = sorted_dict[:70]
         item['tf-idf']['terms_tfidf'] = dict(sorted_dict)
         # del item['tf-idf']['terms_ocur']
     return
@@ -173,7 +202,10 @@ for article_id in articles:
 score_mean = (statistics.mean(map(lambda x:x[3], cross_project)))
 
 def score_less_than_mean(x):
-    return  x[3] >= 0.8 * score_mean
+    return  x[3] >= 0.2 * score_mean
+
+def score_less_than_mean_art(x):
+    return  x[3] >= 1.5 * score_mean
 
 cross_project = filter(score_less_than_mean, cross_project)
 
@@ -183,7 +215,7 @@ result = []
 for art_id in articles:
     pairs = list(filter(lambda x:x[0] == art_id, cross_project))
     score_mean = (statistics.mean(map(lambda x:x[3], cross_project)))
-    pairs_filt = list(filter(score_less_than_mean, pairs))
+    pairs_filt = list(filter(score_less_than_mean_art, pairs))
     if len(pairs_filt) < 2:
         pairs_filt = pairs[:2]
     result += pairs_filt
