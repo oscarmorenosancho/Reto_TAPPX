@@ -5,11 +5,18 @@ import statistics
 import nltk
 import spacy
 from nltk.stem import SnowballStemmer
+from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 stemmer = SnowballStemmer('spanish')
+lemmat = WordNetLemmatizer()
 nlp = spacy.load("es_dep_news_trf")
 
+OUTPUT_DBUG = 1
+
+def extract_classes(lst):
+    class_lst = map (lambda x: x["class"], lst)
+    return list(class_lst)
 
 def remove_punt(s):
     if (s and len(s)>0):
@@ -24,7 +31,8 @@ def remove_punt(s):
 to_lower = lambda s: s.lower()
 
 def keyword_to_root(s):
-    return stemmer.stem(s)
+    # return stemmer.stem(s)
+    return lemmat.stem(s)
 
 not_discard = lambda s: len(s) > 3
 
@@ -35,19 +43,25 @@ not_discard = lambda s: len(s) > 3
 #         if word not in stop_words:
 #             tokens.append(word)
 #     return tokens
+
 def tokenize_text(text):
     text = remove_punt(text)
     doc = nlp(text)
     lst = []
     for token in doc:
         lst.append([token.text, token.pos_])
-    # avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV', 'VERB']
-    avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV']
+    avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV', 'VERB']
+    # avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV']
     lst = list(filter(lambda x: not x[1] in avoid , lst))
     lst = list(map(lambda x: x[0], lst))
     lst = list(filter(lambda x: len(x)>3, lst))
-
     return lst
+
+def stem_terms(terms):
+    roots = []
+    for term in terms:
+        roots.append(stemmer.stem(term))
+    return roots 
 
 # Terms extraction from document, from text title and keywords
 def doc_terms_extract(item):
@@ -56,11 +70,6 @@ def doc_terms_extract(item):
     # Tokenize the text
     text = item['text']
     terms = tokenize_text(text)
-    # roots = []
-    # terms = list(filter (not_discard, terms))
-    # for term in terms:
-    #     roots.append(stemmer.stem(term))
-    # terms = roots
 
     keywords = list(filter(not_discard, item['keywords']))
     atom_keywords = [*keywords]
@@ -71,6 +80,7 @@ def doc_terms_extract(item):
     if 'title' in item:
         title = tokenize_text(item['title'])
         terms = [*terms, *title, *title]
+    terms = stem_terms(terms)
     return terms
   
 # Coptutes the occurrences of terms in a document
@@ -151,13 +161,34 @@ def compute_tfidf(totals,item):
 def compute_projection(doc1, doc2):
     doc1_terms = doc1['tf-idf']['terms_tfidf']
     doc2_terms = doc2['tf-idf']['terms_tfidf']
+    if 'categoriaIAB' in doc1:
+        doc1_classes_lst = extract_classes(doc1['categoriaIAB'])
+    if 'categoriaIAB' in doc2:
+        doc2_classes_lst = extract_classes(doc2['categoriaIAB'])
+    class_match = 0
+    for doc1_class in doc1_classes_lst:
+        if doc1_class in doc2_classes_lst:
+            class_match += 1
     cross_prod = {}
     acum = 0
     for doc_term in doc1_terms:
         if doc_term in doc2_terms:
             cross_prod[doc_term] = doc1_terms[doc_term] * doc2_terms[doc_term]
             acum += cross_prod[doc_term]
-    return {"cross_prod": cross_prod, "acum": acum}
+    if class_match > 0:
+        acum *= 1.2
+    if class_match > 1:
+        acum *= 1.2
+    
+    sorted_list = []
+    for key in cross_prod:
+        sorted_list.append([key, cross_prod[key]])
+    sorted_list = sorted(sorted_list, key=lambda x:x[1],reverse=True)
+    cross_prod = {}
+    for pair in sorted_list:
+        cross_prod [pair[0]] = pair[1]
+
+    return {"cross_prod": cross_prod,  "acum": acum , "class_match": class_match}
 
 # This converst list of result to final result
 def transform_in_dict(list_cross):
@@ -165,9 +196,14 @@ def transform_in_dict(list_cross):
     for pairing in list_cross:
         if not pairing[0] in res:
             res[pairing[0]] = dict()
-            res[pairing[0]]['len'] = 0 
-        res[pairing[0]][pairing[1]] = {'matchs': pairing[2], 'score': pairing[3]}
-        res[pairing[0]]['len'] += 1
+            if OUTPUT_DBUG:
+                res[pairing[0]]['len'] = 0
+        if OUTPUT_DBUG: 
+            res[pairing[0]][pairing[1]] = {'matchs': pairing[2], 'score': pairing[3], 'class_match': pairing[4]}
+        else:
+            res[pairing[0]][pairing[1]] = {'score': pairing[3]}
+        if OUTPUT_DBUG:
+            res[pairing[0]]['len'] += 1
     return res
 
 # Main
@@ -209,7 +245,7 @@ for article_id in articles:
     for video_id in videos:
         proj = compute_projection(articles[article_id], videos[video_id])
         if (proj["acum"] > 0):
-            cross_project.append([article_id, video_id, proj['cross_prod'], proj['acum']])
+            cross_project.append([article_id, video_id, proj['cross_prod'], proj['acum'], proj['class_match'] ])
 
 
 # Function to decide popsition to filter
@@ -218,7 +254,7 @@ def score_less_than_mean(x):
 
 # Function to decide popsition to filter in article
 def score_less_than_mean_art(x):
-    return  x[3] >= score_mean + score_stdev
+    return  x[3] >= score_mean + 1.5 * score_stdev
 
 
 data = list(map(lambda x:x[3], cross_project))
