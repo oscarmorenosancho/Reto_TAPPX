@@ -1,23 +1,40 @@
+# Tappx challenge
+# Made by following students of 42 Barcelona:
+# omoreno- / julolle- / sersanch
+
 import json
 import re
 import math
 import statistics
-import nltk
 import spacy
 from nltk.stem import SnowballStemmer
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+
 stemmer = SnowballStemmer('spanish')
 lemmat = WordNetLemmatizer()
 nlp = spacy.load("es_dep_news_trf")
 
-OUTPUT_DBUG = 1
+OUTPUT_DBUG = 0 # 1 for extra info in results, else 0
+ARTICLES_FILE = "articles.json"
+VIDEOS_FILE = "videos.json"
+ARTICLE_RESULTS_FILE = "result_art.json"
+VIDEOS_RESULTS_FILE = "result_vid.json"
+CROSS_RESULTS_FILE = "cross_project.json"
+TOTAL_RESULTS_FILE = "totals.json"
 
+score_mean = 0
+score_stdev = 0
+to_lower = lambda s: s.lower()
+not_discard = lambda s: len(s) > 3
+
+## Functions definition 
 def extract_classes(lst):
     class_lst = map (lambda x: x["class"], lst)
     return list(class_lst)
 
+# Cleans the text to remove symbols
 def remove_punt(s):
     if (s and len(s)>0):
         ret = s.replace('.', ' ').replace(':', ' ').replace(',', ' ')
@@ -28,30 +45,18 @@ def remove_punt(s):
         ret = ret.lower()
     return ret
 
-to_lower = lambda s: s.lower()
-
 def keyword_to_root(s):
-    # return stemmer.stem(s)
     return lemmat.stem(s)
 
-not_discard = lambda s: len(s) > 3
-
-# def tokenize_text(text, stop_words):
-#     words = word_tokenize(text.lower())
-#     tokens = []
-#     for word in words:
-#         if word not in stop_words:
-#             tokens.append(word)
-#     return tokens
-
+# Gets the syntactic meaning of every token in a text
 def tokenize_text(text):
     text = remove_punt(text)
     doc = nlp(text)
     lst = []
+
     for token in doc:
         lst.append([token.text, token.pos_])
     avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV', 'VERB']
-    # avoid = ['DET', 'ADP', 'NUM', 'PUNCT', 'SYM', 'CCONJ', 'SCONJ', 'AUX', 'PRON', 'SPACE', 'ADV']
     lst = list(filter(lambda x: not x[1] in avoid , lst))
     lst = list(map(lambda x: x[0], lst))
     lst = list(filter(lambda x: len(x)>3, lst))
@@ -65,8 +70,6 @@ def stem_terms(terms):
 
 # Terms extraction from document, from text title and keywords
 def doc_terms_extract(item):
-    # stop_words = set(stopwords.words('spanish'))
-    # terms = tokenize_text(text, stop_words)
     # Tokenize the text
     text = item['text']
     terms = tokenize_text(text)
@@ -83,7 +86,7 @@ def doc_terms_extract(item):
     terms = stem_terms(terms)
     return terms
   
-# Coptutes the occurrences of terms in a document
+# Computes the occurrences of terms in a document
 def compute_str_ocur(item):
     terms = doc_terms_extract (item)
     terms_set = list(set(terms))
@@ -190,8 +193,8 @@ def compute_projection(doc1, doc2):
 
     return {"cross_prod": cross_prod,  "acum": acum , "class_match": class_match}
 
-# This converst list of result to final result
-def transform_in_dict(list_cross):
+# This converts list of result to final result
+def transform_to_dict(list_cross):
     res = dict()
     for pairing in list_cross:
         if not pairing[0] in res:
@@ -207,92 +210,92 @@ def transform_in_dict(list_cross):
     return res
 
 # Main
-with open('articles.json') as user_file:
-    articles = json.load(user_file)
-with open('videos.json') as user_file:
-    videos = json.load(user_file)
+def vid_art_linking():
+    # Function to decide position to filter
+    def score_less_than_mean(x):
+        return  x[3] >= 0.2 * score_mean
 
-for article_id in articles:
-    article = articles[article_id]
-    print (article_id)
-    article['tf-idf'] = compute_str_ocur(article)
+    # Function to decide position to filter in article
+    def score_less_than_mean_art(x):
+        return  x[3] >= score_mean + 1.5 * score_stdev
 
-for video_id in videos:
-    video = videos[video_id]
-    print (video_id)
-    video['tf-idf'] = compute_str_ocur(video)
+    with open(ARTICLES_FILE) as user_file:
+        articles = json.load(user_file)
+    with open(VIDEOS_FILE) as user_file:
+        videos = json.load(user_file)
 
+    for article_id in articles:
+        article = articles[article_id]
+        print (article_id)
+        article['tf-idf'] = compute_str_ocur(article)
 
-totals = { }
-for item in articles:
-    totals = update_total_str_ocur(totals, articles[item])
-
-for item in videos:
-    totals = update_total_str_ocur(totals, videos[item])
-
-compute_idf (totals)
-# articles.update(videos)
-for article_id in articles:
-    article = articles[article_id]
-    compute_tfidf(totals,article)
-
-for video_id in videos:
-    video = videos[video_id]
-    compute_tfidf(totals,video)
-
-cross_project = []
-for article_id in articles:
     for video_id in videos:
-        proj = compute_projection(articles[article_id], videos[video_id])
-        if (proj["acum"] > 0):
-            cross_project.append([article_id, video_id, proj['cross_prod'], proj['acum'], proj['class_match'] ])
+        video = videos[video_id]
+        print (video_id)
+        video['tf-idf'] = compute_str_ocur(video)
 
 
-# Function to decide popsition to filter
-def score_less_than_mean(x):
-    return  x[3] >= 0.2 * score_mean
+    totals = { }
+    for item in articles:
+        totals = update_total_str_ocur(totals, articles[item])
 
-# Function to decide popsition to filter in article
-def score_less_than_mean_art(x):
-    return  x[3] >= score_mean + 1.5 * score_stdev
+    for item in videos:
+        totals = update_total_str_ocur(totals, videos[item])
 
+    compute_idf (totals)
 
-data = list(map(lambda x:x[3], cross_project))
-score_mean = (statistics.mean(data))
-score_stdev =  (statistics.stdev(data))
-print (f"Totals stats: mean {score_mean}, stdev {score_stdev}")
-cross_project = filter(score_less_than_mean, cross_project)
+    for article_id in articles:
+        article = articles[article_id]
+        compute_tfidf(totals,article)
 
-cross_project = sorted(cross_project, key=lambda x:x[3],reverse=True)
+    for video_id in videos:
+        video = videos[video_id]
+        compute_tfidf(totals,video)
 
-result = []
-for art_id in articles:
-    pairs = list(filter(lambda x:x[0] == art_id, cross_project))
-    data = list(map(lambda x:x[3], pairs))
+    cross_project = []
+    for article_id in articles:
+        for video_id in videos:
+            proj = compute_projection(articles[article_id], videos[video_id])
+            if (proj["acum"] > 0):
+                cross_project.append([article_id, video_id, proj['cross_prod'], proj['acum'], proj['class_match'] ])
+
+    data = list(map(lambda x:x[3], cross_project))
     score_mean = (statistics.mean(data))
     score_stdev =  (statistics.stdev(data))
-    print (f"Article: {art_id} stats: mean {score_mean}, stdev {score_stdev}")
-    pairs_filt = list(filter(score_less_than_mean_art, pairs))
-    if len(pairs_filt) < 2:
-        pairs_filt = pairs[:2]
-    result += pairs_filt
-    
-result = transform_in_dict(result)
+    print (f"Totals stats: mean {score_mean}, stdev {score_stdev}")
+    cross_project = filter(score_less_than_mean, cross_project)
 
-json_object = json.dumps(articles)
-with open("result_art.json", "w") as outfile:
-    outfile.write(json_object)
+    cross_project = sorted(cross_project, key=lambda x:x[3],reverse=True)
 
-json_object = json.dumps(videos)
-with open("result_vid.json", "w") as outfile:
-    outfile.write(json_object)
+    result = []
+    for art_id in articles:
+        pairs = list(filter(lambda x:x[0] == art_id, cross_project))
+        data = list(map(lambda x:x[3], pairs))
+        score_mean = (statistics.mean(data))
+        score_stdev =  (statistics.stdev(data))
+        print (f"Article: {art_id} stats: mean {score_mean}, stdev {score_stdev}")
+        pairs_filt = list(filter(score_less_than_mean_art, pairs))
+        if len(pairs_filt) < 2:
+            pairs_filt = pairs[:2]
+        result += pairs_filt
 
-json_object = json.dumps(totals)
-with open("totals.json", "w") as outfile:
-    outfile.write(json_object)
+    result = transform_to_dict(result)
 
-json_object = json.dumps(result)
-with open("cross_project.json", "w") as outfile:
-    outfile.write(json_object)
+    if OUTPUT_DBUG:
+        json_object = json.dumps(articles)
+        with open(ARTICLE_RESULTS_FILE, "w") as outfile:
+            outfile.write(json_object)
+        json_object = json.dumps(videos)
+        with open(VIDEOS_RESULTS_FILE, "w") as outfile:
+            outfile.write(json_object)
+        json_object = json.dumps(totals)
+        with open(TOTAL_RESULTS_FILE, "w") as outfile:
+            outfile.write(json_object)
+        print (len(result))
 
-print (len(result))
+    json_object = json.dumps(result)
+    with open(CROSS_RESULTS_FILE, "w") as outfile:
+        outfile.write(json_object)
+        
+if __name__ == "__main__":
+    vid_art_linking()
