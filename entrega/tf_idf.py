@@ -209,95 +209,93 @@ def transform_to_dict(list_cross):
             res[pairing[0]]['len'] += 1
     return res
 
-# Function to decide popsition to filter
-def score_less_than_mean(x):
-    return  x[3] >= 0.2 * score_mean
-
-# Function to decide popsition to filter in article
-def score_less_than_mean_art(x):
-    return  x[3] >= score_mean + 1.5 * score_stdev
-
 # Main
 def vid_art_linking():
-	with open(ARTICLES_FILE) as user_file:
-		articles = json.load(user_file)
-	with open(VIDEOS_FILE) as user_file:
-		videos = json.load(user_file)
+    # Function to decide position to filter
+    def score_less_than_mean(x):
+        return  x[3] >= 0.2 * score_mean
 
-	for article_id in articles:
-		article = articles[article_id]
-		print (article_id)
-		article['tf-idf'] = compute_str_ocur(article)
+    # Function to decide position to filter in article
+    def score_less_than_mean_art(x):
+        return  x[3] >= score_mean + 1.5 * score_stdev
 
-	for video_id in videos:
-		video = videos[video_id]
-		print (video_id)
-		video['tf-idf'] = compute_str_ocur(video)
+    with open(ARTICLES_FILE) as user_file:
+        articles = json.load(user_file)
+    with open(VIDEOS_FILE) as user_file:
+        videos = json.load(user_file)
+
+    for article_id in articles:
+        article = articles[article_id]
+        print (article_id)
+        article['tf-idf'] = compute_str_ocur(article)
+
+    for video_id in videos:
+        video = videos[video_id]
+        print (video_id)
+        video['tf-idf'] = compute_str_ocur(video)
 
 
-	totals = { }
-	for item in articles:
-		totals = update_total_str_ocur(totals, articles[item])
+    totals = { }
+    for item in articles:
+        totals = update_total_str_ocur(totals, articles[item])
 
-	for item in videos:
-		totals = update_total_str_ocur(totals, videos[item])
+    for item in videos:
+        totals = update_total_str_ocur(totals, videos[item])
 
-	compute_idf (totals)
+    compute_idf (totals)
 
-	for article_id in articles:
-		article = articles[article_id]
-		compute_tfidf(totals,article)
+    for article_id in articles:
+        article = articles[article_id]
+        compute_tfidf(totals,article)
 
-	for video_id in videos:
-		video = videos[video_id]
-		compute_tfidf(totals,video)
+    for video_id in videos:
+        video = videos[video_id]
+        compute_tfidf(totals,video)
 
-	cross_project = []
-	for article_id in articles:
-		for video_id in videos:
-			proj = compute_projection(articles[article_id], videos[video_id])
-			if (proj["acum"] > 0):
-				cross_project.append([article_id, video_id, proj['cross_prod'], proj['acum'], proj['class_match'] ])
+    cross_project = []
+    for article_id in articles:
+        for video_id in videos:
+            proj = compute_projection(articles[article_id], videos[video_id])
+            if (proj["acum"] > 0):
+                cross_project.append([article_id, video_id, proj['cross_prod'], proj['acum'], proj['class_match'] ])
 
-	data = list(map(lambda x:x[3], cross_project))
-	score_mean = (statistics.mean(data))
-	score_stdev =  (statistics.stdev(data))
-	print (f"Totals stats: mean {score_mean}, stdev {score_stdev}")
-	cross_project = filter(score_less_than_mean, cross_project)
+    data = list(map(lambda x:x[3], cross_project))
+    score_mean = (statistics.mean(data))
+    score_stdev =  (statistics.stdev(data))
+    print (f"Totals stats: mean {score_mean}, stdev {score_stdev}")
+    cross_project = filter(score_less_than_mean, cross_project)
 
-	cross_project = sorted(cross_project, key=lambda x:x[3],reverse=True)
+    cross_project = sorted(cross_project, key=lambda x:x[3],reverse=True)
 
-	result = []
-	for art_id in articles:
-		pairs = list(filter(lambda x:x[0] == art_id, cross_project))
-		data = list(map(lambda x:x[3], pairs))
-		score_mean = (statistics.mean(data))
-		score_stdev =  (statistics.stdev(data))
-		print (f"Article: {art_id} stats: mean {score_mean}, stdev {score_stdev}")
-		pairs_filt = list(filter(score_less_than_mean_art, pairs))
-		if len(pairs_filt) < 2:
-			pairs_filt = pairs[:2]
-		result += pairs_filt
-		
-	result = transform_to_dict(result)
+    result = []
+    for art_id in articles:
+        pairs = list(filter(lambda x:x[0] == art_id, cross_project))
+        data = list(map(lambda x:x[3], pairs))
+        score_mean = (statistics.mean(data))
+        score_stdev =  (statistics.stdev(data))
+        print (f"Article: {art_id} stats: mean {score_mean}, stdev {score_stdev}")
+        pairs_filt = list(filter(score_less_than_mean_art, pairs))
+        if len(pairs_filt) < 2:
+            pairs_filt = pairs[:2]
+        result += pairs_filt
 
-	json_object = json.dumps(articles)
-	with open(ARTICLE_RESULTS_FILE, "w") as outfile:
-		outfile.write(json_object)
+    result = transform_to_dict(result)
 
-	json_object = json.dumps(videos)
-	with open(VIDEOS_RESULTS_FILE, "w") as outfile:
-		outfile.write(json_object)
+    if OUTPUT_DBUG:
+        json_object = json.dumps(articles)
+        with open(ARTICLE_RESULTS_FILE, "w") as outfile:
+            outfile.write(json_object)
+        json_object = json.dumps(videos)
+        with open(VIDEOS_RESULTS_FILE, "w") as outfile:
+            outfile.write(json_object)
+        json_object = json.dumps(totals)
+        with open(TOTAL_RESULTS_FILE, "w") as outfile:
+            outfile.write(json_object)
+        print (len(result))
 
-	json_object = json.dumps(totals)
-	with open(TOTAL_RESULTS_FILE, "w") as outfile:
-		outfile.write(json_object)
-
-	json_object = json.dumps(result)
-	with open(CROSS_RESULTS_FILE, "w") as outfile:
-		outfile.write(json_object)
-
-	print (len(result))
+    json_object = json.dumps(result)
+    with open(CROSS_RESULTS_FILE, "w") as outfile:
+        outfile.write(json_object)
         
 if __name__ == "__main__":
-    vid_art_linking
+    vid_art_linking()
