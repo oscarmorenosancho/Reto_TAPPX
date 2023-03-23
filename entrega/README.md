@@ -7,9 +7,9 @@ Association of videos to contextually related articles.
 We use Spacy to tokenize the text of the document, and also the title if there is one, and the keywords.  The title terms are added to the terms in duplicate so that they have more weight than the text. The keywords are added to the whole terms but also tokenised. On the other hand we also evaluate the coincidence of the classes of the documents, when there is a coincidence we multiply the score of the similarity between documents by 1.2, if they coincide a second time, we multiply again the score by 1.2. That's for increasing the weight of this similarity.
 In the tokenisation of the text, title and keywords we also apply a lemmatisation of the nlkt library to each term obtained. In the tokenisation we use the classification in the type of words to eliminate the ones we consider that do not contribute like determiners, prepositions, conjunctions, etc.
 ### 2. Importance of tokenized words
-Getting the string occurrence in each article and each video. The least occurrences, the more unique and important are these words.
+Getting the string occurrence in each article and each video. The more occurrences, the more unique and important are these words in the document.
 ### 3. Importance of tokenized words (Full corpus)
-Doing the same but with the entire corpus of all articles and videos.
+Doing the same but with the entire corpus of all articles and videos. The more ocurrences of the word in corpus (all the documents), less relevant it is.
 ### 4. Vectorisation
 In the vectorisation we use the TF-IDF algorithm where we measure the frequency of each term in each document, and the inverse frequency of occurrences in the corpus of documents. Each word in the list of terms in a document gets a TF-IDF measure which is the product of its TF in the document and the IDF in the corpus.
 ### 5. Score
