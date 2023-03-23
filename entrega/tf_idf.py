@@ -16,7 +16,7 @@ stemmer = SnowballStemmer('spanish')
 lemmat = WordNetLemmatizer()
 nlp = spacy.load("es_dep_news_trf")
 
-OUTPUT_DBUG = 1 # 1 for extra info in results, else 0
+OUTPUT_DBUG = 0 # 1 for extra info in results, else 0
 ARTICLES_FILE = "articles.json"
 VIDEOS_FILE = "videos.json"
 ARTICLE_RESULTS_FILE = "result_art.json"
